@@ -1,16 +1,16 @@
 
 const inquirer = require("inquirer");
 const cTable = require('console.table');
-const mysql = require("./mysql.js");
+const mysql = require("./sql.js");
 
-const sql = new mysql("localhost", 3306, "root", "userpw");
+const sql = new mysql();
 
 const baseQuestions = [ 
     {   // action
         type: "list",
         message: "What would you like to do:",
         name: "action",
-        choices: ["View", "Add", "Update", "Delete"]
+        choices: ["View", "Add", "Update", "Delete", "Exit"]
     },
     {   // target
         type: "list",
@@ -71,7 +71,7 @@ const employeeBase = [
         type: "list",
         message: "Select the employee's manager:",
         name: "managerId",
-        choices: managers   // TODO - check if array of objects are valid in list prompt
+        choices: employees   // TODO - check if array of objects are valid in list prompt
     }
 ];
 
@@ -80,22 +80,28 @@ const employeeSearch = [
         type: "list",
         message: "Search employee by:",
         name: "category",
-        choices: ["id", "first_name", "last_name", "role_id", "manager_id", "All"]   // check if valid
+        choices: ["ID", "First name", "Last name", "Title", "Department", "Manager", "All"]   // check if valid
     },
     {   // query
         type: "input",
         message: "Enter your search query:",
         name: "query"
+    },
+    {   // category 
+        type: "list",
+        message: "Select your target:",
+        name: "target",
+        choices: employees   // check if valid
     }
 ];
 
-var targets = [];
+var updates = [];
 const updateBase = [
     {   // target
         type: "list",
         message: "Select the update target:",
         name: "updateTarget",
-        choices: targets   // TODO - check if array of objects are valid in list prompt
+        choices: updates   // TODO - check if array of objects are valid in list prompt
     }
 ];
 
@@ -105,13 +111,15 @@ const removeBase = [
         type: "list",
         message: "Select the target to remove:",
         name: "removeTarget",
-        choices: targets   // TODO - check if array of objects are valid in list prompt
+        choices: removes   // TODO - check if array of objects are valid in list prompt
     }
 ];
 
 async function base() {
     try {
-        const { action, target } = await inquirer.prompt(baseQuestions);
+        const { action } = await inquirer.prompt(baseQuestions[0]);
+        if (action === "Exit") { return; }
+        const { target } = await inquirer.prompt(baseQuestions[1]);
 
         switch (action) {
             case "View":
@@ -125,6 +133,8 @@ async function base() {
                 break;
             case "Delete":
                 await remove(target);
+                break;
+            case "Exit":
                 break;
             default:
                 break;
@@ -141,19 +151,46 @@ async function base() {
 
 async function view(target) {
     try {
-        var where;
+        var where = "NULL";
         if (target === "Employee") {
-            const { category, query } = await inquirer.prompt(employeeSearch);
-            if (category === "All") {
-                where = NULL;
-            } else {
-                where = `${category} CONTAINS ${query}`;
+            const searchResponse = await inquirer.prompt(employeeSearch[0]);
+
+            if (searchResponse.category === "ID") {
+                const { query } = inquirer.prompt(employeeSearch[1]);
+                where = `ID = ${query}`;
+            } else if (searchResponse.category === "First name") {
+                const { query } = inquirer.prompt(employeeSearch[1]);
+                where = `"First name" CONTAINS "${query}"`;
+            } else if (searchResponse.category === "Last name") {
+                const { query } = inquirer.prompt(employeeSearch[1]);
+                where = `"Last name" CONTAINS "${query}"`;
+            } else if (searchResponse.category === "Title") {
+                const titleResponse = await sql.viewQuery("title", "Roles", "NULL");
+                for (const item of titleResponse) {
+                    employees.push(item.title);
+                }
+                const { target } = await inquirer.prompt(employeeSearch[2]);
+                where = `Title = "${target}"`;
+            } else if (searchResponse.category === "Department") {
+                const departmentResponse = await sql.viewQuery("department", "Departments", "NULL");
+                for (const item of departmentResponse) {
+                    employees.push(item.department);
+                }
+                const { target } = await inquirer.prompt(employeeSearch[2]);
+                where = `Department = ${target}`;
+            } else if (searchResponse.category === "Manager") {
+                const managerResponse = await sql.viewQuery("*", "Employees", `Title = "Manager"`);
+                for (const item of managerResponse) {
+                    employees.push(`${item.FirstName} ${item.LastName}`);
+                }
+                const { target } = await inquirer.prompt(employeeSearch[2]);
+                where = `Manager = "${target}"`;
+            } else if (searchResponse.category === "All") {
+                where = "NULL";
             }
-        } else {
-            where = NULL;
         }
 
-        const response = await sql.viewQuery(["*"], target, where);
+        const response = await sql.viewQuery("*", target, where);
         if (!response) {
             throw new Error("No data to show.");
         }
@@ -167,74 +204,150 @@ async function view(target) {
 
 async function addOrUpdate(target, add) {
     try {
-        var valuesArray;
-        var updateTargetQuery;
+        var setValuesClause;
+        var whereClause;
 
         switch (target) {
             case "Departments":
                 if (add === false) {
-                    departments = await sql.viewQuery(["*"], "Departments", NULL);
-                    if (!departments) {
-                        throw new Error("No departments to update");
+                    const response = await sql.viewQuery("*", "Departments", "NULL");
+                    if (!response) {
+                        throw new Error("No departments to remove.");
+                    } else {
+                        for (const item of response) {
+                            removes.push(`${item.id}) ${item.department}`);
+                        }
                     }
 
-                    const { updateTarget } = await inquirer.prompt(updateBase);
-                    updateTargetQuery = [updateTarget.id, updateTarget.department_name];
+                    const { removeTarget } = await inquirer.prompt(removeBase); // check that properties are valid
+                    var departmentTarget;
+                    for (const item of response) {
+                        if (removeTarget === `${item.id}) ${item.department}`) { departmentTarget = item; }
+                    }
+                    whereClause = `id = ${departmentTarget.id}, department = "${departmentTarget.department}"`;
                 }
 
                 const { departmentName } = await inquirer.prompt(departmentBase); // check that properties are valid
-                valuesArray = [departmentName];
+                setValuesClause = `"${departmentName}"`;
 
                 break;   
             case "Roles":
                 if (add === false) {
-                    roles = await sql.viewQuery(["*"], "Roles", NULL);
-                    if (!roles) {
-                        throw new Error("No roles to update");
+                    const rolesResponse = await sql.viewQuery("title", "Roles", "NULL");
+                    if (!rolesResponse) {
+                        throw new Error("No roles to update.");
+                    } else {
+                        for (const item of rolesResponse) {
+                            updates.push(`${item.title}`);
+                        }
                     }
 
                     const { updateTarget } = await inquirer.prompt(updateBase);
-                    updateTargetQuery = [updateTarget.id, updateTarget.title, updateTarget.salary, updateTarget.department_id];
+                    whereClause = `title = "${updateTarget}"`;
                 }
 
-                departments = await sql.viewQuery(["*"], "Departments", NULL);
-                departments.push(NULL)
+                const response = await sql.viewQuery("id, department", "Departments", "NULL");
+                for (const item of response) {
+                    departments.push(`${item.id}) ${item.department}`);
+                }
+                departments.push("NULL")
 
-                const { roleTitle, roleSalary, departmentId } = await inquirer.prompt(roleBase); // check that properties are valid
-                valuesArray = [roleTitle, roleSalary, departmentId.id];
+                const { roleTitle, roleSalary, department } = await inquirer.prompt(roleBase); // check that properties are valid
+                var departmentId;
+                for (const item of response) {
+                    if ( department === `${item.id}) ${item.department}`) { departmentId = item.id; }
+                }
+                setValuesClause = `title = "${roleTitle}", salary = ${roleSalary}, department_id = ${departmentId}`;
 
                 break;
             case "Employees":
                 if (add === false) {
-                    const { category, query } = await inquirer.prompt(employeeSearch);
                     var where;
-                    if (category === "All") {
-                        where = NULL;
-                    } else {
-                        where = `${category} CONTAINS ${query}`;
+                    if (target === "Employee") {
+                        const searchResponse = await inquirer.prompt(employeeSearch[0]);
+
+                        if (searchResponse.category === "ID") {
+                            const { query } = inquirer.prompt(employeeSearch[1]);
+                            where = `ID = ${query}`;
+                        } else if (searchResponse.category === "First name") {
+                            const { query } = inquirer.prompt(employeeSearch[1]);
+                            where = `"First name" CONTAINS "${query}"`;
+                        } else if (searchResponse.category === "Last name") {
+                            const { query } = inquirer.prompt(employeeSearch[1]);
+                            where = `"Last name" CONTAINS "${query}"`;
+                        } else if (searchResponse.category === "Title") {
+                            const titleResponse = await sql.viewQuery("title", "Roles", "NULL");
+                            for (const item of titleResponse) {
+                                employees.push(item.title);
+                            }
+                            const { target } = await inquirer.prompt(employeeSearch[2]);
+                            where = `Title = "${target}"`;
+                        } else if (searchResponse.category === "Department") {
+                            const departmentResponse = await sql.viewQuery("department", "Departments", "NULL");
+                            for (const item of departmentResponse) {
+                                employees.push(item.department);
+                            }
+                            const { target } = await inquirer.prompt(employeeSearch[2]);
+                            where = `Department = ${target}`;
+                        } else if (searchResponse.category === "Manager") {
+                            const managerResponse = await sql.viewQuery("*", "Employees", `Title = "Manager"`);
+                            for (const item of managerResponse) {
+                                employees.push(`${item.FirstName} ${item.LastName}`);
+                            }
+                            const { target } = await inquirer.prompt(employeeSearch[2]);
+                            where = `Manager = "${target}"`;
+                        } else if (searchResponse.category === "All") {
+                            where = "NULL";
+                        }
                     }
-                   
-                    employees = await sql.viewQuery(["*"], "Employees", where);
-                    if (!employees) {
+
+                    const employeeResponse = await sql.viewQuery("*", "Employees", where);
+                    if (!employeeResponse) {
                         throw new Error("No such employees found.");
+                    } else {
+                        for (const item of employeeResponse) {
+                            updates.push(`${item.ID}) ${item.FirstName} ${item.LastName}`);
+                        }
                     }
 
                     const { updateTarget } = await inquirer.prompt(updateBase);
-                    updateTargetQuery = [updateTarget.id, updateTarget.first_name, updateTarget.last_name,
-                                            updateTarget.role_id, updateTarget.manager_id];
+                    var employee;
+                    for (const item of employeeResponse) {
+                        if (updateTarget === `${item.id}) ${item.FirstName} $${item.LastName}`) { employee = item; }
+                    }
+                    whereClause = `id = ${employee.id}, first_name = "${employee.FirstName}", last_name = "${employee.LastName}"`;
                 }
             
-                roles = await sql.viewQuery(["id", "title"], "Roles");   // check that properties are valid
-                roles.push(NULL);
-
-                const managerRoleId = await sql.viewQuery(["id"], "Roles", `roleTitle = Manager`);
-                if (managerRoleId) {
-                    employees = await sql.viewQuery(["id, firstName, lastName"], "Employees", `roleId = ${managerRoleId[0].id}`);
+                const rolesResponse = await sql.viewQuery("id, title", "Roles", "NULL");   // check that properties are valid
+                for (const item of rolesResponse) {
+                    roles.push(`${item.id}) ${item.title}`);
                 }
-                employees.push(NULL);
+                roles.push("NULL");
 
-                const { firstName, lastName, roleId, ManagerId } = await inquirer.prompt(employeeBase); // check that properties are valid
-                valuesArray = [firstName, lastName, roleId.id, ManagerId.id];
+                var managersResponse;
+                if (managerRoleId) {
+                    managersResponse = await sql.viewQuery("*", "Employees", `Title = "Manager"`);
+                    for (const item of managersResponse) {
+                        managers.push(`${item.ID}) ${item.FirstName} ${item.LastName}`);
+                    }
+                }
+                managers.push("NULL");
+
+                const { firstName, lastName, roleId, managerId } = await inquirer.prompt(employeeBase);
+                var role = "NULL";
+                if (roleId !== "NULL") {
+                    for (const item of rolesResponse) {
+                        if (roleId === `${item.id}) ${item.title}`) { role = item; }
+                    }
+                }
+                var manager = "NULL";
+                if (managerId !== "NULL") {
+                    for (const item of managersResponse) {
+                        if (managerId === `${item.ID}) ${item.FirstName} ${item.LastName}`) { manager = item; }
+                    }
+                }
+                
+                setValuesClause = `first_name = "${firstName}", last_name = "${lastName}", role_id = ${role.id}, manager_id = ${manager.id}`;
 
                 break;
             default:
@@ -242,10 +355,10 @@ async function addOrUpdate(target, add) {
         }
 
         if (add === true) {
-            await sql.addQuery(target, valuesArray);
+            await sql.addQuery(target, setValuesClause);
             console.log(`${target} added.`);
         } else {
-            await sql.updateQuery(target, valuesArray, updateTargetQuery);
+            await sql.updateQuery(target, setValuesClause, whereClause);
             console.log(`Target updated.`);
         }
         
@@ -256,52 +369,111 @@ async function addOrUpdate(target, add) {
 
 async function remove(target) {
     try {
-        var where;
+        var whereClause;
+        var updateId;
         switch (target) {
             case "Departments":
-                removes = await sql.viewQuery(["*"], "Departments", NULL);
-                if (!removes) {
-                    throw new Error("No departments to remove.")
+                const departmentResponse = await sql.viewQuery("*", "Departments", "NULL");
+                if (!departmentResponse) {
+                    throw new Error("No departments to remove.");
+                } else {
+                    for (const item of departmentResponse) {
+                        removes.push(`${item.id}) ${item.department}`);
+                    }
                 }
 
-                const { removeTarget } = await inquirer.prompt(removeBase); // check that properties are valid
-                where = [removeTarget.id, removeTarget.department_name];
+                const departmentRemove = await inquirer.prompt(removeBase); // check that properties are valid
+                var department;
+                for (const item of departmentResponse) {
+                    if (departmentRemove.removeTarget === `${item.id}) ${item.department}`) { department = item; }
+                }
+                whereClause = `id = ${department.id}, department = "${department.department}"`;
+                updateId = department.id;
 
                 break;   
             case "Roles":
-                removes = await sql.viewQuery(["*"], "Roles", NULL);
-                if (!removes) {
+                const rolesResponse = await sql.viewQuery("*", "Roles", "NULL");
+                if (!rolesResponse) {
                     throw new Error("No roles to remove.")
+                } else {
+                    for (const item of rolesResponse) {
+                        removes.push(`${item.id}) ${item.title} : $${item.salary} - Department ${item.department_id}`)
+                    }
                 }
 
-                const { removeTarget } = await inquirer.prompt(removeBase); // check that properties are valid
-                where = [removeTarget.id, removeTarget.title, removeTarget.salary, removeTarget.department_id];
+                const roleRemove = await inquirer.prompt(removeBase); // check that properties are valid
+                var role;
+                for (const item of rolesResponse) {
+                    if (roleRemove.removeTarget === `${item.id}) ${item.title} : $${item.salary} - Department ${item.department_id}`) {
+                        role = item
+                    }
+                }
+                whereClause = `id = ${role.id}, title = "${role.title}", salary = ${role.salary}, department_id = ${role.department_id}`;
+                updateId = role.id;
 
                 break;
             case "Employees":
-                const { category, query } = await inquirer.prompt(employeeSearch);
-                var where;
-                if (category === "All") {
-                    where = NULL;
+                const searchResponse = await inquirer.prompt(employeeSearch[0]);
+
+                if (searchResponse.category === "ID") {
+                    const { query } = inquirer.prompt(employeeSearch[1]);
+                    where = `ID = ${query}`;
+                } else if (searchResponse.category === "First name") {
+                    const { query } = inquirer.prompt(employeeSearch[1]);
+                    where = `"First name" CONTAINS "${query}"`;
+                } else if (searchResponse.category === "Last name") {
+                    const { query } = inquirer.prompt(employeeSearch[1]);
+                    where = `"Last name" CONTAINS "${query}"`;
+                } else if (searchResponse.category === "Title") {
+                    const titleResponse = await sql.viewQuery("title", "Roles", "NULL");
+                    for (const item of titleResponse) {
+                        employees.push(item.title);
+                    }
+                    const { target } = await inquirer.prompt(employeeSearch[2]);
+                    where = `Title = "${target}"`;
+                } else if (searchResponse.category === "Department") {
+                    const departmentResponse = await sql.viewQuery("department", "Departments", "NULL");
+                    for (const item of departmentResponse) {
+                        employees.push(item.department);
+                    }
+                    const { target } = await inquirer.prompt(employeeSearch[2]);
+                    where = `Department = ${target}`;
+                } else if (searchResponse.category === "Manager") {
+                    const managerResponse = await sql.viewQuery("*", "Employees", `Title = "Manager"`);
+                    for (const item of managerResponse) {
+                        employees.push(`${item.FirstName} ${item.LastName}`);
+                    }
+                    const { target } = await inquirer.prompt(employeeSearch[2]);
+                    where = `Manager = "${target}"`;
+                } else if (searchResponse.category === "All") {
+                    where = "NULL";
+                }
+                
+                const employeeResponse = await sql.viewQuery("*", "Employees", where);
+                if (!employeeResponse) {
+                    throw new Error("No such employees found.");
                 } else {
-                    where = `${category} CONTAINS ${query}`;
+                    for (const item of employeeResponse) {
+                        removes.push(`${item.id}) ${item.first_name} $${item.last_name}`);
+                    }
                 }
 
-                removes = await sql.viewQuery(["*"], "Employees", where);
-                if (!removes) {
-                    throw new Error("No roles to remove.")
+                const employeeRemove = await inquirer.prompt(removeBase); // check that properties are valid
+                var employee;
+                for (const item of employeeResponse) {
+                    if (employeeRemove.removeTarget === `${item.id}) ${item.first_name} $${item.last_name}`) {
+                        employee = item;
+                    }
                 }
-
-                const { removeTarget } = await inquirer.prompt(removeBase); // check that properties are valid
-                where = [removeTarget.id, removeTarget.first_name, removeTarget.last_name,
-                            removeTarget.role_id, removeTarget.manager_id];
+                whereClause = `id = ${employee.id}, first_name = "${employee.first_name}", last_name = "${employee.last_name}"`;
+                updateId = employee.id;
 
                 break;
             default:
                 break;
         }
 
-        await sql.removeQuery(target, where);
+        await sql.removeQuery(target, whereClause, updateId);
         console.log("Target removed.");
 
     } catch(err) {
@@ -311,8 +483,15 @@ async function remove(target) {
 
 // main function
 async function init() {
+    // sql.connection.connect(function(err) {
+    //     if (err) throw err;
+    //     await base();
+    // });
     await sql.start();
     await base();
+    sql.end();
 }
 
 init();
+
+// bonus features - cancel option, update all option
