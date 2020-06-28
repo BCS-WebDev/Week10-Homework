@@ -116,17 +116,4 @@ const orm = {
     }
 };
 
-var query = `DELETE FROM ${table} WHERE ${whereClause};`;
-
-const connection = this.connection();
-connection.connect(function(err) {
-    if (err) throw err;
-
-    connection.query(query, function(err) {
-        if (err) throw err;
-
-        connection.end();
-    });
-});  
-
 module.exports = orm;
