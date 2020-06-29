@@ -1,6 +1,7 @@
 
-const mysql = require("mysql");
+const mysql = require("mysql");  // load mysql module
 
+// establish connection to database
 const connection = mysql.createConnection({
     host: "localhost",
     port: 3306,
@@ -9,6 +10,7 @@ const connection = mysql.createConnection({
     database: "tracker_db"
 });
 
+// connect to databse
 connection.connect(function(err) {
     if (err) {
         console.error("Error connecting: " + err.stack);
@@ -16,28 +18,5 @@ connection.connect(function(err) {
     }
 });
 
-async function sendConnection() {
-    try {
-        return new Promise((resolve, reject)=>{
-            const connection = mysql.createConnection({
-                host: "localhost",
-                port: 3306,
-                user: "root",
-                password: "!Kc88107",
-                database: "tracker_db"
-            });
-
-            connection.connect(function(err) {
-                if (err) {
-                    reject(new Error("error connecting: " + err.stack));
-                }
-                console.log("Connection ready.")
-                resolve(connection);
-            });
-        });
-    } catch (err) {
-        if (err) throw err;
-    }
-}
-
+// export connection
 module.exports = connection;

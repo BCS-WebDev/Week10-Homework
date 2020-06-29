@@ -1,8 +1,9 @@
 
-const connection = require("./connection.js");
-const { query } = require("./connection.js");
+const connection = require("./connection.js");  // load sql database connection
 
+// orm for sql queries - promisified for better flow
 const orm = {
+    // select from
     selectFrom: async function(column, table) {
         try {
             var queryString = "SELECT ?? FROM ??";
@@ -18,6 +19,7 @@ const orm = {
             if (err) throw err;
         }
     },
+    // get managers
     getManagers: async function() {
         try {
             var queryString = `SELECT employee.id AS ID,
@@ -38,7 +40,8 @@ const orm = {
             if (err) throw err;
         }
     },
-    viewEmployeeWhere: async function(column, connector, value) {
+    // get employees where
+    getEmployeeWhere: async function(column, connector, value) {
         try {
             var queryString = `SELECT employee.id AS ID, 
                                     employee.first_name AS FirstName, 
@@ -67,6 +70,7 @@ const orm = {
             if (err) throw err;
         }
     },
+    // update 
     updateQuery: async function(table, values, idColumn, id) {
         try {
             var queryString = `UPDATE ${table} SET ${values} WHERE ${idColumn} = ${id}`;
@@ -82,6 +86,7 @@ const orm = {
             if (err) throw err;
         }   
     },
+    // add
     addQuery: async function(table, properties, values) {
         try {
             var queryString = `INSERT INTO ${table} (${properties}) VALUES (${values})`;
@@ -97,6 +102,7 @@ const orm = {
             if (err) throw err;
         }   
     },
+    // remove
     removeQuery: async function(table, column, value) {
         try {
             var queryString = `DELETE FROM ?? WHERE ?? = ?;`;
@@ -112,6 +118,7 @@ const orm = {
             if (err) throw err;
         }   
     },
+    // end connection
     endConnection: function() {
         connection.end();
     }
