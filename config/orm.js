@@ -1,5 +1,6 @@
 
 const connection = require("./connection.js");
+const { query } = require("./connection.js");
 
 const orm = {
     selectFrom: async function(column, table) {
@@ -7,12 +8,10 @@ const orm = {
             var queryString = "SELECT ?? FROM ??";
             return new Promise((resolve, reject)=>{
                 connection.query(queryString, [column, table], function(err, data) {
-                    if (err || !data) {
-                        reject(new Error(`No ${table} to choose from.`));  
+                    if (err) {
+                        reject(new Error(console.log(`No ${table} to choose from.`)));  
                     }
-
-                    const choices = data.map(item => item);
-                    resolve(choices);
+                    resolve(data);
                 });
             });
         } catch (err) {
@@ -30,12 +29,9 @@ const orm = {
             return new Promise((resolve, reject)=>{
                 connection.query(queryString, function(err, data) {
                     if (err) {
-                        reject(new Error(`No Managers to choose from.`));  
+                        reject(new Error(console.log(`No Managers to choose from.`)));  
                     }
-
-                    const choices = data.map(item => item);
-                    choices.push("NULL")
-                    resolve(choices);
+                    resolve(data);
                 });
             });
         } catch (err) {
@@ -58,14 +54,13 @@ const orm = {
                                     ON employee.role_id = role.id
                                 LEFT JOIN Departments department
                                     ON role.department_id = department.id`;
-            if (column !== '') { queryString += ` WHERE ?? ${connector} ?`; }
+            if (column !== '') { queryString += ` WHERE ${column} ${connector} "${value}"`; }
             return new Promise((resolve, reject)=>{
                 connection.query(queryString, [column, value], function(err, data) {
-                    if (err || !data) {
-                        reject(new Error("No such employees to choose from."));  
+                    if (err) {
+                        reject(new Error(console.log("No such employees to choose from.")));  
                     }
-                    const tableData = data.map(item => item);
-                    resolve(tableData);
+                    resolve(data);
                 });
             });
         } catch (err) {
@@ -74,12 +69,14 @@ const orm = {
     },
     updateQuery: async function(table, values, idColumn, id) {
         try {
-            var queryString = `UPDATE ?? SET ${values} WHERE ?? = ?`;
-            await connection.query(queryString, [table, idColumn, id], function(err, data) {
-                if (err) {
-                    throw new Error(`Rejected.`);  
-                }
-                console.log(`Updated.`)
+            var queryString = `UPDATE ${table} SET ${values} WHERE ${idColumn} = ${id}`;
+            return new Promise((resolve, reject)=>{
+                connection.query(queryString, [table, idColumn, id], function(err, data) {
+                    if (err) {
+                        reject(new Error(console.log(`Rejected.`)));  
+                    }
+                    resolve(console.log(`Updated.`));
+                });
             }); 
         } catch (err) {
             if (err) throw err;
@@ -87,13 +84,15 @@ const orm = {
     },
     addQuery: async function(table, properties, values) {
         try {
-            var queryString = `INSERT INTO ?? (${properties}) VALUES (${values})`;
-            await connection.query(queryString, [table], function(err, data) {
-                if (err) {
-                    throw new Error(`Rejected.`);  
-                }
-                console.log(`Added.`)
-            }); 
+            var queryString = `INSERT INTO ${table} (${properties}) VALUES (${values})`;
+            return new Promise((resolve, reject)=>{
+                connection.query(queryString, [table], function(err, data) {
+                    if (err) {
+                        reject(new Error(console.log(`Rejected.`)));  
+                    }
+                    resolve(console.log(`Added.`));
+                }); 
+            });
         } catch (err) {
             if (err) throw err;
         }   
@@ -101,12 +100,14 @@ const orm = {
     removeQuery: async function(table, column, value) {
         try {
             var queryString = `DELETE FROM ?? WHERE ?? = ?;`;
-            await connection.query(queryString, [table, column, value], function(err, data) {
-                if (err) {
-                    throw new Error(`Rejected.`);  
-                }
-                console.log(`Deleted.`)
-            }); 
+            return new Promise((resolve, reject)=>{
+                connection.query(queryString, [table, column, value], function(err, data) {
+                    if (err) {
+                        reject(new Error(console.log(`Rejected.`)));  
+                    }
+                    resolve(console.log(`Deleted.`));
+                }); 
+            });
         } catch (err) {
             if (err) throw err;
         }   

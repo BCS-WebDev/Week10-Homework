@@ -26,7 +26,6 @@ const departmentBase = [
     }
 ];
 
-var departments = [];
 const roleBase = [
     {   // role title
         type: "input",
@@ -37,17 +36,9 @@ const roleBase = [
         type: "input",
         message: "Enter the role's salary:",
         name: "roleSalary"
-    },
-    {   // department id
-        type: "list",
-        message: "Select the role's department:",
-        name: "departmentId",
-        choices: departments   // check if valid
     }
 ];
 
-var roles = [];
-var managers = [];
 const employeeBase = [
     {   // first name
         type: "input",
@@ -58,48 +49,20 @@ const employeeBase = [
         type: "input",
         message: "Enter the employee's last name:",
         name: "lastName"
-    },
-    {   // role 
-        type: "list",
-        message: "Select the employee's role:",
-        name: "roleId",
-        choices: roles   // check if valid
-    },
-    {   // target
-        type: "list",
-        message: "Select the employee's manager:",
-        name: "managerId",
-        choices: managers   // TODO - check if array of objects are valid in list prompt
     }
 ];
 
-var choices = [];
 const employeeSearch = [
     {   // category 
         type: "list",
         message: "Search employee by:",
         name: "category",
-        choices: ["ID", "First name", "Last name", "Title", "Department", "Manager", "All"]   // check if valid
+        choices: ["ID", "First name", "Last name", "Title", "Department", "Manager", "All"]   
     },
     {   // query
         type: "input",
         message: "Enter your search query:",
         name: "query"
-    },
-    {   // choice
-        type: "list",
-        message: "Select your target:",
-        name: "choice",
-        choices: choices   // check if valid
-    }
-];
-
-const updateOrRemoveBase = [
-    {   // update or remove target
-        type: "list",
-        message: "Select your target:",
-        name: "updateTarget",
-        choices: choices   // TODO - check if array of objects are valid in list prompt
     }
 ];
 
@@ -146,12 +109,12 @@ async function remove(target) {
         } else if (target === "Roles") {
             const targetId = await updateOrRemoveTarget(target, true);
 
-            await orm.updateQuery(target, "id", targetId);
+            await orm.removeQuery(target, "id", targetId);
             await orm.updateQuery("Employees", "role_id = NULL", "role_id", targetId);
         } else if (target === "Employees") {
             const targetId = await updateOrRemoveTarget(target, true);
 
-            await orm.updateQuery(target, "id", targetId);
+            await orm.removeQuery(target, "id", targetId);
             await orm.updateQuery("Employees", "manager_id = NULL", "manager_id", targetId);
         } 
 
@@ -164,29 +127,44 @@ async function updateOrRemoveTarget(target) {
     try {
         if (target === "Departments") {
             const tempChoices = await orm.selectFrom("*", target);
-            choices = tempChoices.map(item => `${item.id}. ${item.department}`)
-
-            const { updateTarget } = inquirer.prompt(updateOrRemoveBase);
+            if (tempChoices.length === 0) { throw new Error(console.log("No departments to choose from.")); }
+            const choicesArray = tempChoices.map(item => `${item.id}. ${item.department}`)
+            const { updateTarget } = await inquirer.prompt({   
+                type: "list",
+                message: "Select your target:",
+                name: "updateTarget",
+                choices: choicesArray   
+            });
             const targetId = tempChoices.filter(item => `${item.id}. ${item.department}` === updateTarget);
 
             return targetId[0].id;
         } else if (target === "Roles") {
             const tempChoices = await orm.selectFrom("*", target);
-            choices = tempChoices.map(item => `${item.id}. ${item.title}`)
-
-            const { updateTarget } = inquirer.prompt(updateOrRemoveBase);
+            if (tempChoices.length === 0) { throw new Error(console.log("No roles to choose from.")); }
+            const choicesArray = tempChoices.map(item => `${item.id}. ${item.title}`)
+            const { updateTarget } = await inquirer.prompt({   
+                type: "list",
+                message: "Select your target:",
+                name: "updateTarget",
+                choices: choicesArray   
+            });
             const targetId = tempChoices.filter(item => `${item.id}. ${item.title}` === updateTarget);
 
             return targetId[0].id;
         } else if (target === "Employees") {
             const { column, connector, value } = await employeeSpecific();
-            const tempChoices = orm.viewEmployeeWhere(column, connector, value);
-            choices = tempChoices.map(item => `${item.id}. ${item.FirstName} ${item.LastName}`)
-
-            const { updateTarget } = inquirer.prompt(updateOrRemoveBase);
-            const targetId = tempChoices.filter(item => `${item.id}. ${item.FirstName} ${item.LastName}` === updateTarget);
-
-            return targetId[0].id;
+            const tempChoices = await orm.viewEmployeeWhere(column, connector, value);
+            if (tempChoices.length === 0) { throw new Error(console.log("No such employees to choose from.")); }
+            const choicesArray = tempChoices.map(item => `${item.ID}. ${item.FirstName} ${item.LastName}`)
+            const { updateTarget } = await inquirer.prompt({   
+                type: "list",
+                message: "Select your target:",
+                name: "updateTarget",
+                choices: choicesArray   
+            });
+            const targetId = tempChoices.filter(item => `${item.ID}. ${item.FirstName} ${item.LastName}` === updateTarget);
+            
+            return targetId[0].ID;
         } 
 
     } catch(err) {
@@ -200,37 +178,66 @@ async function addInfo(target, isUpdate) {
             const { departmentName } = await inquirer.prompt(departmentBase);
 
             if (isUpdate) {
-                return `department = ${departmentName}`;
+                return `department = "${departmentName}"`;
             } else {
-                return `${departmentName}`;
+                return `"${departmentName}"`;
             }
         } else if (target === "Roles") {
-            const tempDepartments = await orm.selectFrom("*", "Departments");
-            departments = tempDepartments.map(item => `${item.id}. ${item.department}`)
+            const { roleTitle, roleSalary } = await inquirer.prompt(roleBase);
 
-            const { roleTitle, roleSalary, departmentId } = await inquirer.prompt(roleBase);
+            const tempDepartments = await orm.selectFrom("*", "Departments");
+            if (tempDepartments.length === 0) { throw new Error(console.log("No departments to choose from.")); }
+            const departments = tempDepartments.map(item => `${item.id}. ${item.department}`)
+            const { departmentId } = await inquirer.prompt({   
+                type: "list",
+                message: "Select the role's department:",
+                name: "departmentId",
+                choices: departments   
+            });
             const targetDepartment = tempDepartments.filter(item => `${item.id}. ${item.department}` === departmentId);
 
             if (isUpdate) {
-                return `title = ${roleTitle}, salary = ${roleSalary}, department_id = ${targetDepartment[0].id}`;
+                return `title = "${roleTitle}", salary = ${roleSalary}, department_id = ${targetDepartment[0].id}`;
             } else {
-                return `${roleTitle}, ${roleSalary}, ${targetDepartment[0].id}`;
+                return `"${roleTitle}", ${roleSalary}, ${targetDepartment[0].id}`;
             }
         } else if (target === "Employees") {
-            const roleChoices = await orm.selectFrom("*", target);
-            roles = roleChoices.map(item => `${item.id}. ${item.title}`)
+            const { firstName, lastName } = await inquirer.prompt(employeeBase);
+
+            const roleChoices = await orm.selectFrom("*", "Roles");
+            if (roleChoices.length === 0) { throw new Error(console.log("No roles to choose from.")); }
+            const roles = roleChoices.map(item => `${item.id}. ${item.title}`);
+            const { roleId } = await inquirer.prompt({   
+                type: "list",
+                message: "Select the employee's role:",
+                name: "roleId",
+                choices: roles   
+            });
+            const roleTarget = roleChoices.filter(item => `${item.id}. ${item.title}` === roleId);
+
+            if (roleTarget[0].title === "Manager" && isUpdate === false) {
+                if (isUpdate) {
+                    return `first_name = "${firstName}", last_name = "${lastName}", role_id = ${roleTarget[0].id}, manager_id = NULL`;
+                } else {
+                    return `"${firstName}", "${lastName}", ${roleTarget[0].id}, NULL`;
+                }
+            }
 
             const tempManagers = await orm.getManagers();
-            managers = tempManagers.map(item => `${item.ID}. ${item.Name}`);
-
-            const { firstName, lastName, roleId, managerId } = inquirer.prompt(employeeBase);
-            const roleTarget = tempChoices.filter(item => `${item.id}. ${item.title}` === roleId);
+            if (tempManagers.length === 0) { throw new Error(console.log("No Managers to choose from.")); }
+            const managers = tempManagers.map(item => `${item.ID}. ${item.Name}`);
+            const { managerId } = await inquirer.prompt({   
+                type: "list",
+                message: "Select the employee's manager:",
+                name: "managerId",
+                choices: managers   
+            });
             const managerTarget = tempManagers.filter(item => `${item.ID}. ${item.Name}` === managerId);
 
             if (isUpdate) {
-                return `first_name = ${firstName}, last_name = ${lastName}, role_id = ${roleTarget[0].id}, manager_id = ${managerTarget[0].id}`;
+                return `first_name = "${firstName}", last_name = "${lastName}", role_id = ${roleTarget[0].id}, manager_id = ${managerTarget[0].ID}`;
             } else {
-                return `${firstName}, ${lastName}, ${roleTarget[0].id}, ${managerTarget[0].id}`;
+                return `"${firstName}", "${lastName}", ${roleTarget[0].id}, ${managerTarget[0].ID}`;
             }
         } 
 
@@ -272,13 +279,13 @@ async function update(target) {
 
             await orm.updateQuery(target, newValues, "id", targetId);
         } else if (target === "Roles") {
-            const targetId = await updateOrRemoveTarget(target, true);
-            const newValues = await addInfo(target);
+            const targetId = await updateOrRemoveTarget(target);
+            const newValues = await addInfo(target, true);
 
             await orm.updateQuery(target, newValues, "id", targetId);
         } else if (target === "Employees") {
-            const targetId = await updateOrRemoveTarget(target, true);
-            const newValues = await addInfo(target);
+            const targetId = await updateOrRemoveTarget(target);
+            const newValues = await addInfo(target, true);
 
             await orm.updateQuery(target, newValues, "id", targetId);
         } 
@@ -288,7 +295,7 @@ async function update(target) {
     }
 }
 
-async function employeeSpecific() {  // START HERE - ADD ACTION, TABLE PARAMETER FOR UPDATE
+async function employeeSpecific() {  
     try {
         const { category } = await inquirer.prompt(employeeSearch[0]);
 
@@ -306,38 +313,59 @@ async function employeeSpecific() {  // START HERE - ADD ACTION, TABLE PARAMETER
                 connector: `LIKE`,
                 value: query
             }
-        } else if (searchResponse.category === "Last name") {
+        } else if (category === "Last name") {
             const { query } = await inquirer.prompt(employeeSearch[1]);
             return {
                 column: `employee.last_name`,
                 connector: `LIKE`,
                 value: query
             }
-        } else if (searchResponse.category === "Title") {
-            choices = await orm.selectFrom("title", "Roles");
-            const { choice } = await inquirer.prompt(employeeSearch[2]);
+        } else if (category === "Title") {
+            const roles = await orm.selectFrom("title", "Roles");
+            const choicesArray = roles.map(item => item.title);
+            const { choice } = await inquirer.prompt({   
+                type: "list",
+                message: "Select your target:",
+                name: "choice",
+                choices: choicesArray   
+            });
+
             return {
                 column: `role.title`,
                 connector: `=`,
                 value: choice
             }
-        } else if (searchResponse.category === "Department") {
-            choices = await orm.selectFrom("department", "Departments");
-            const { choice } = await inquirer.prompt(employeeSearch[2]);
+        } else if (category === "Department") {
+            const department = await orm.selectFrom("department", "Departments");
+            const choicesArray = department.map(item => item.department);
+            const { choice } = await inquirer.prompt({   
+                type: "list",
+                message: "Select your target:",
+                name: "choice",
+                choices: choicesArray   
+            });
+
             return {
                 column: `department.department`,
                 connector: `=`,
                 value: choice
             }
-        } else if (searchResponse.category === "Manager") {
+        } else if (category === "Manager") {
             const tempManagers = await orm.getManagers();
-            choices = tempManagers.map(item => `${item.ID}. ${item.Name}`);
-            const { choice } = await inquirer.prompt(employeeSearch[2]);
+            const choicesArray = tempManagers.map(item => `${item.ID}. ${item.Name}`);
+            const { choice } = await inquirer.prompt({   
+                type: "list",
+                message: "Select your target:",
+                name: "choice",
+                choices: choicesArray   
+            });
+
             const target = tempManagers.filter(item => `${item.ID}. ${item.Name}` === choice);
+
             return {
                 column: `CONCAT(manager.first_name, " ", manager.last_name)`,
                 connector: `=`,
-                value: target[0].Name
+                value: `${target[0].Name}`
             }
         } else {
             return {
@@ -362,16 +390,21 @@ async function view(target) {
             tableData = await orm.selectFrom("*", target);
         }
 
-        const table = cTable.getTable(tableData);
-        console.log("\n");
-        console.log(table);
-
+        if (tableData.length > 0) {
+            const table = cTable.getTable(tableData);
+            console.log("\n");
+            console.log(table);
+        }
+        else {
+            console.log("\n");
+            console.log("No data.");
+            console.log("\n");
+        }
     } catch(err) {
         if (err) throw err;
     }
 }
 
-// main function
 async function init() {
     await base();
 }
