@@ -1,6 +1,8 @@
 # Employee Tracker
 BootCampSpot Web Development - Week 10 Homework
 
+![Preview](https://github.com/BCS-WebDev/Week10-Homework/blob/master/Assets/EmployeeTracker.gif)
+
 ## Notes on Content Management Systems & MySQL
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; For our Employee tracker, we will implement a CMS
 , or Content Management System, which allows users access to view, add, update, or delete
